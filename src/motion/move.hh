@@ -19,13 +19,13 @@ public:
 
   // r: rad/s
   void move(const util::Vector2f &v, float w) {
-    float output0 = v.x - v.y - w * (rx + ry);
-    float output1 = v.x + v.y + w * (rx + ry);
-    float output2 = v.x + v.y - w * (rx + ry);
+    float output0 = alpha_n_.dot(v) + w * radius;
+    float output1 = beta_n_.dot(v) + w * radius;
+    float output2 = gamma_n_.dot(v) + w * radius;
 
-    motor_alpha_.rotate_open_loop(output0);
-    motor_beta_.rotate_open_loop(output1);
-    motor_gamma_.rotate_open_loop(output2);
+    motor_alpha_.rotate_closed_loop(output0);
+    motor_beta_.rotate_closed_loop(output1);
+    motor_gamma_.rotate_closed_loop(output2);
   }
 
 private:
@@ -33,6 +33,9 @@ private:
   dev::Motor &motor_beta_;
   dev::Motor &motor_gamma_;
 
-  constexpr static inline float rx = 0.525f; // m
-  constexpr static inline float ry = 0.950f; // m
+  const static inline util::Vector2f alpha_n_{0.5, 0.866};
+  const static inline util::Vector2f beta_n_{0.5, -0.866};
+  const static inline util::Vector2f gamma_n_{-1, 0};
+
+  constexpr static inline float radius = 0.13; // m
 };

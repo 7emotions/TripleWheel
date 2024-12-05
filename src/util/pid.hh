@@ -11,6 +11,13 @@ template <typename _input, typename _output> struct PID {
         kp * error_current + ki * error_cumulative + kd * error_diff;
 
     error_cumulative += error_current;
+
+    if (error_cumulative > 5) {
+      error_cumulative = 5;
+    } else if (error_cumulative < -5) {
+      error_cumulative = -5;
+    }
+
     error_last = error_current;
 
     return output;

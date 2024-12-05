@@ -59,9 +59,7 @@ public:
 
 private:
   void (*rotate_)(float);
-
   util::PID<float, float> pid_;
-
   float speed_scan_ = 0;
 };
 

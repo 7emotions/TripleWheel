@@ -27,9 +27,12 @@ struct Vector2f {
     x -= other.x;
     y -= other.y;
   }
+  Vector2f operator*(float scalar) const { return {x * scalar, y * scalar}; }
+
+  float dot(const Vector2f &other) const { return x * other.x + y * other.y; }
 };
 
-template <typename T> constexpr T limit(T value, T min, T max) {
+template <typename T> const T limit(T value, T min, T max) {
   value = (value > max) ? max : value;
   value = (value < min) ? min : value;
   return value;
