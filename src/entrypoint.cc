@@ -1,6 +1,7 @@
 #include "entrypoint.hh"
 #include "protocol.hh"
 #include "singleton.hh"
+#include <cstdlib>
 
 using namespace hal;
 
@@ -10,6 +11,10 @@ namespace global {
 float rotation{0.f};
 float speed[wheel_num]{0.f};
 float v{0.f};
+
+enum class EndState { Up, Down } end_state{EndState::Up};
+
+enum class State { Tracking, Finding, Get_Nearby, Found } state{State::Finding};
 
 auto time{0};
 
@@ -30,17 +35,45 @@ GENERATE_TIM_PERIOD_ELAPSED_CALLBACK(single::timer5)
 
 namespace mission {
 
-auto toggle() -> void { single::led::toggle(); }
+auto toggle_led() -> void { single::led::toggle(); }
+
+template <global::EndState state> auto set_end_state() -> void {
+  if (state == global::EndState::Up) {
+    single::servo_left::set_ratio(12.5 / 100);
+    single::servo_right::set_ratio(2.5 / 100);
+    global::end_state = global::EndState::Up;
+  } else {
+    single::servo_left::set_ratio(2.5 / 100);
+    single::servo_right::set_ratio(12.5 / 100);
+    global::end_state = global::EndState::Down;
+  }
+}
+
+auto toggle_servo() -> void {
+  if (global::end_state == global::EndState::Up) {
+    set_end_state<global::EndState::Down>();
+  } else {
+    set_end_state<global::EndState::Up>();
+  }
+}
 
 auto apply_motion() -> void {
   if (global::watchdog_tick > 100) {
     global::rotation = 0;
     global::v = 0;
+    global::state = global::State::Finding;
+
+    single::motion.move({0., global::v}, global::rotation / 50.f);
   } else if (global::watchdog_tick > 30) {
     global::v = 0;
+    single::motion.move({0., global::v}, global::rotation / 50.f);
+  } else {
+    if (std::abs(global::v) < 0.3 && std::abs(global::rotation) < 0.1) {
+      global::state = global::State::Found;
+    } else {
+      single::motion.move({0., global::v}, global::rotation / 50.f);
+    }
   }
-
-  single::motion.move({0., global::v}, global::rotation / 50.f);
 }
 
 auto update_status() -> void {
@@ -75,6 +108,9 @@ auto serial_callback(UART_HandleTypeDef *, uint16_t) -> void {
   global::package = *package;
   if (package->header_a == 0x2c && package->header_b == 0x12 &&
       package->end == 0x5b) {
+    if (global::state == global::State::Finding) {
+      global::state = global::State::Tracking;
+    }
     global::v = package->v;
     global::rotation = package->w;
   }
@@ -99,9 +135,48 @@ auto entrypoint() -> void {
   single::remote.receive_idle<Mode::It>(receive);
   single::remote.set_callback(mission::serial_callback);
 
-  single::timer5.register_activity(1000, mission::toggle);
+  mission::set_end_state<global::EndState::Up>();
+
+  single::servo_left::start<hal::Mode::Normal>();
+  single::servo_right::start<hal::Mode::Normal>();
+
+  single::timer5.register_activity(1000, mission::toggle_led);
   single::timer5.register_activity(5, mission::update_status);
-  single::timer5.register_activity(5, mission::apply_motion);
+  single::timer5.register_activity(5, []() {
+    switch (global::state) {
+    case global::State::Tracking: {
+      mission::apply_motion();
+      return;
+    }
+    case global::State::Finding: {
+      mission::set_end_state<global::EndState::Up>();
+      break;
+    }
+    case global::State::Get_Nearby: {
+      static auto count{0};
+      if (count++ > 85 && global::end_state == global::EndState::Up) {
+        single::motor0.rotate_closed_loop(0.);
+        single::motor1.rotate_closed_loop(0.);
+        single::motor2.rotate_closed_loop(0.);
+        mission::set_end_state<global::EndState::Down>();
+
+      } else if (count > 1085) {
+        global::state = global::State::Finding;
+        count = 0;
+      }
+      return;
+    }
+    case global::State::Found: {
+      single::motor0.rotate_closed_loop(0.8);
+      single::motor1.rotate_closed_loop(0.);
+      single::motor2.rotate_closed_loop(-0.8);
+      global::state = global::State::Get_Nearby;
+      return;
+    }
+    default:
+      break;
+    }
+  });
 
   single::timer5.start();
 

@@ -39,6 +39,9 @@ inline Encoder<&htim4> encoder2{};
 
 using led = gpio::PA<1>;
 
+using servo_left = PWM<&htim8, pwm::channel1>;
+using servo_right = PWM<&htim8, pwm::channel2>;
+
 inline Timer<&htim5> timer5{};
 
 inline Serial<&huart1> remote{};
