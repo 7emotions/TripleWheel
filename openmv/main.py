@@ -21,14 +21,22 @@ size_threshold = 1000
 x_pid = PID(p=3, i=0, imax=80, d=0)
 h_pid = PID(p=0.05, i=0, imax=50, d=0.00)
 
+state = True
+
 
 def find_max(blobs):
     max_size = 0
+    max_blob = None
     for blob in blobs:
-        if blob[2] * blob[3] > max_size:
+        if blob[2] * blob[3] > max_size and ((state ^ blob[2] < blob[3] * 2)):
             max_blob = blob
             max_size = blob[2] * blob[3]
+
     return max_blob
+
+
+def get_color_pixel_count(statistic_data, color_threshold):
+    pass
 
 
 def send_data(v, w):
@@ -45,20 +53,24 @@ while True:
     clock.tick()
     img = sensor.snapshot()
 
+    if uart.any():
+        a = uart.readline()
+        print("====================", a)
+
     blobs = img.find_blobs([red_threshold])
     if blobs:
         max_blob = find_max(blobs)
-        x_error = max_blob[5] - img.width() / 2
-        #        print(max_blob[2]*max_blob[3])
-        h_error = max_blob[2] * max_blob[3] - size_threshold
+        if max_blob:
+            x_error = max_blob[5] - img.width() / 2
+            h_error = max_blob[2] * max_blob[3] - size_threshold
 
-        img.draw_rectangle(max_blob[0:4])
-        img.draw_cross(max_blob[5], max_blob[6])
+            img.draw_rectangle(max_blob[0:4])
+            img.draw_cross(max_blob[5], max_blob[6])
 
-        x_output = x_pid.get_pid(x_error, 1)
-        h_output = h_pid.get_pid(h_error, 0.05, 0.8)
-        print("x_output:", x_output, "x_e", x_error)
-        print("h_output:", h_output)
-        send_data(-h_output, x_output)
+            x_output = x_pid.get_pid(x_error, 1)
+            h_output = h_pid.get_pid(h_error, 0.05, 0.8)
+            print("x_output:", x_output)
+            print("h_output:", h_output)
+            send_data(-h_output, x_output)
     else:
         print("no target")
